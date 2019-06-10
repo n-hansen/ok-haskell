@@ -7,7 +7,19 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Ok where
 
-import Turtle
+import           Data.Text
+import           Turtle
 
 main :: IO ()
 main = echo "Hello World!"
+
+
+--- Types ---
+
+data Command = Command { commandString :: Text
+                       } deriving (Eq,Show)
+
+--- File Parsing ---
+
+parseOkText :: Text -> [Command]
+parseOkText txt = [Command txt]
