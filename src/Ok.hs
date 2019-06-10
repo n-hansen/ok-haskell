@@ -3,6 +3,8 @@
   script
   --resolver lts-13.25
   --package turtle
+  --package text
+  --package megaparsec
 -}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies      #-}
