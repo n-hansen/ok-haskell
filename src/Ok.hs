@@ -5,6 +5,9 @@
   --package turtle
 -}
 {-# LANGUAGE OverloadedStrings #-}
+module Ok where
+
 import Turtle
 
+main :: IO ()
 main = echo "Hello World!"

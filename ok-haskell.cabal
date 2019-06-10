@@ -16,6 +16,25 @@ extra-source-files:  README.md
 executable ok
   hs-source-dirs:      src
   main-is:             Ok.hs
+  ghc-options:         -main-is Ok.main
   default-language:    Haskell2010
   build-depends:       base >= 4.7 && < 5
+                     , turtle
+
+library ok-lib
+  hs-source-dirs:      src
+  exposed-modules:     Ok
+  default-language:    Haskell2010
+  build-depends:       base >= 4.7 && < 5
+                     , turtle
+
+test-suite test
+  default-language:    Haskell2010
+  type:                exitcode-stdio-1.0
+  hs-source-dirs:      tests
+  main-is:             test.hs
+  build-depends:       base >= 4.7 && < 5
+                     , ok-lib
+                     , tasty >= 0.7
+                     , tasty-hunit
                      , turtle
