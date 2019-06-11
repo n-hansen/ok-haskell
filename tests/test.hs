@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
-import qualified Data.Text as T
-import           Ok               hiding (main)
+import qualified Data.Text                             as T
+import           Ok                                    hiding (main)
 import           Test.Tasty
 import           Test.Tasty.HUnit
 
@@ -78,9 +78,30 @@ tests =
         , Command "baz" Nothing Nothing
         ]
       ]
+
+    , testGroup "document render tests"
+      [ renderTestCase "render test 1"
+        (DocumentRoot [Command "foo" Nothing Nothing])
+        "1: foo\n"
+      , renderTestCase "render test 2"
+        ( DocumentRoot [ Command "foo" Nothing Nothing
+                       , Command "bar" Nothing Nothing
+                       ]
+        )
+        ( unlines [ "1: foo"
+                  , "2: bar"
+                  ]
+        )
+      , renderTestCase "render test 3"
+        (DocumentRoot [Command "foo" (Just "bar baz") Nothing])
+        "1: foo # bar baz\n"
+      ]
     ]
   ]
 
 
 parserTestCase name input expect =
   testCase name $ parseOkText input @?= Just expect
+
+renderTestCase name document expect =
+  testCase name $ (show $ render document) @?= expect

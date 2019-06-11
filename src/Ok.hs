@@ -5,6 +5,7 @@
   --package turtle
   --package text
   --package megaparsec
+  --package prettyprinter
 -}
 {-# LANGUAGE EmptyDataDecls     #-}
 {-# LANGUAGE FlexibleInstances  #-}
@@ -19,12 +20,12 @@ module Ok where
 import           Control.Monad
 import           Data.Char
 import           Data.Maybe
-import           Data.Text            as T
+import           Data.Text                 as T
+import           Data.Text.Prettyprint.Doc
 import           Data.Void
-import           Debug.Trace
-import           Text.Megaparsec      as MP
-import           Text.Megaparsec.Char as MP
-import           Turtle               hiding (Parser, sepBy)
+import           Text.Megaparsec           as MP
+import           Text.Megaparsec.Char      as MP
+import           Turtle hiding (Parser)
 
 main :: IO ()
 main = echo "Hello World!"
@@ -50,15 +51,6 @@ deriving instance Show (OkDocument Child)
 deriving instance Show (OkDocument Root)
 deriving instance Eq (OkDocument Child)
 deriving instance Eq (OkDocument Root)
-
-
--- data OkDocument = Command { commandString :: Text
---                           , docString     :: Maybe Text
---                           , alias         :: Maybe Text
---                           }
---                 | Section { sectionName :: Maybe Text
---                           , children    :: [OkDocument] }
---                 deriving (Eq,Show)
 
 --- File Parsing ---
 
@@ -133,3 +125,27 @@ documentParser = DocumentRoot <$> childrenParser 1
 
 parseOkText :: Text -> Maybe (OkDocument Root)
 parseOkText = parseMaybe documentParser
+
+--- Document Rendering ---
+
+render :: OkDocument Root -> Doc Void
+render (DocumentRoot topLevelChildren) = go emptyDoc 1 1 topLevelChildren
+  where
+    go :: Doc Void -> Int -> Int -> [OkDocument Child] -> Doc Void
+    go doc count depth elems =
+      case elems of
+        [] -> doc
+        Command name ds Nothing : rest ->
+          let line = pretty name
+                     & commandPrefix (show count)
+                     & commandSuffix ds
+          in
+            go (doc <> line) (count + 1) depth rest
+
+    commandPrefix alias doc = pretty alias <> ":" <+> doc
+    commandSuffix ds doc =
+      let renderedDs = case ds of
+                         Nothing -> emptyDoc
+                         Just str -> " #" <+> (align . sep . fmap pretty . T.words $ str)
+      in
+        doc <> renderedDs <> hardline
