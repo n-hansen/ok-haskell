@@ -101,12 +101,14 @@ childrenParser minLevel =
   . MP.choice
   $ [ Just <$> try cmdParser
     , Just <$> try (sectionParser minLevel)
-    -- , try emptyLine
+    , try emptyLine
     ]
 
   where
-    emptyLine =
-      takeWhileP Nothing (== ' ') >> endOfLine >> return Nothing
+    emptyLine = do
+      takeWhileP Nothing (== ' ')
+      MP.newline
+      return Nothing
 
 
 sectionParser :: Int -> Parser (OkDocument Child)

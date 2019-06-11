@@ -70,6 +70,13 @@ tests =
                                ]
         , DocumentSection "h4" [Command "flub" Nothing Nothing]
         ]
+      , parserTestCase "parser test 7"
+        "foo\n\nbar\n\n\nbaz"
+        $ DocumentRoot
+        [ Command "foo" Nothing Nothing
+        , Command "bar" Nothing Nothing
+        , Command "baz" Nothing Nothing
+        ]
       ]
     ]
   ]
