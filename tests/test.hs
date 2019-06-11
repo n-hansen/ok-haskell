@@ -14,35 +14,61 @@ tests =
     [ testGroup ".ok file parser"
       [ parserTestCase "parser test 1"
         "foo bar"
-        [Command "foo bar" Nothing Nothing]
+        $ DocumentRoot [Command "foo bar" Nothing Nothing]
       , parserTestCase "parser test 2"
         "foo bar # apply foo to bar"
-        [Command "foo bar" (Just "apply foo to bar") Nothing]
+        $ DocumentRoot [Command "foo bar" (Just "apply foo to bar") Nothing]
       , parserTestCase "parser test 3"
         ( T.unlines [ "foo bar # apply foo to bar"
                     , "baz"
                     , "quux -v # verbose quux"
                     ]
         )
-        [ Command "foo bar" (Just "apply foo to bar") Nothing
-        , Command "baz" Nothing Nothing
-        , Command "quux -v" (Just "verbose quux") Nothing
-        ]
+        $ DocumentRoot [ Command "foo bar" (Just "apply foo to bar") Nothing
+                       , Command "baz" Nothing Nothing
+                       , Command "quux -v" (Just "verbose quux") Nothing
+                       ]
       , parserTestCase "parser test 4"
-        ( T.unlines [ "# comment"
+        ( T.unlines [ "# section"
                     , "foo bar"
                     ]
         )
-        [Command "foo bar" Nothing Nothing]
+        $ DocumentRoot [DocumentSection "section" [Command "foo bar" Nothing Nothing]]
       , parserTestCase "parser test 5"
-        ( T.unlines [ "foo bar # apply foo to bar"
+        ( T.unlines [ "#section"
+                    , "foo bar # apply foo to bar"
                     , "flub: baz"
+                    , "##subsection"
                     , "bort: quux -v # verbose quux"
                     ]
         )
-        [ Command "foo bar" (Just "apply foo to bar") Nothing
-        , Command "baz" Nothing (Just "flub")
-        , Command "quux -v" (Just "verbose quux") (Just "bort")
+        $ DocumentRoot
+        [ DocumentSection "section" [ Command "foo bar" (Just "apply foo to bar") Nothing
+                                    , Command "baz" Nothing (Just "flub")
+                                    , DocumentSection "subsection" [Command "quux -v" (Just "verbose quux") (Just "bort")]
+                                    ]
+        ]
+      , parserTestCase "parser test 6"
+        ( T.unlines [ "foo"
+                    , "#h1"
+                    , "bar"
+                    , "##h2"
+                    , "baz"
+                    , "##h3"
+                    , "quux"
+                    , "#h4"
+                    , "flub"
+                    ]
+        )
+        $ DocumentRoot
+        [ Command "foo" Nothing Nothing
+        , DocumentSection "h1" [ Command "bar" Nothing Nothing
+                               , DocumentSection "h2"
+                                 [Command "baz" Nothing Nothing]
+                               , DocumentSection "h3"
+                                 [Command "quux" Nothing Nothing]
+                               ]
+        , DocumentSection "h4" [Command "flub" Nothing Nothing]
         ]
       ]
     ]
@@ -50,4 +76,4 @@ tests =
 
 
 parserTestCase name input expect =
-  testCase name $ parseOkText input @?= expect
+  testCase name $ parseOkText input @?= Just expect
