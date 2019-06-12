@@ -160,7 +160,28 @@ tests =
                   , "2: flub  # flub doc"
                   ]
         )
-
+      , renderTestCase "render test 9"
+        ( DocumentRoot [ Command "foo" Nothing Nothing
+                       , DocumentSection "h1" [ Command "bar" Nothing Nothing
+                                              , DocumentSection "h2"
+                                                [Command "baz" Nothing Nothing]
+                                              , DocumentSection "h3"
+                                                [Command "quux" Nothing Nothing]
+                                              ]
+                       , DocumentSection "h4" [Command "flub" Nothing Nothing]
+                       ]
+        )
+        ( unlines [ "1: foo"
+                  , "# h1"
+                  , "2: bar"
+                  , "## h2"
+                  , "3: baz"
+                  , "## h3"
+                  , "4: quux"
+                  , "# h4"
+                  , "5: flub"
+                  ]
+        )
       ]
     ]
   ]
