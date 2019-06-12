@@ -94,7 +94,73 @@ tests =
         )
       , renderTestCase "render test 3"
         (DocumentRoot [Command "foo" (Just "bar baz") Nothing])
-        "1: foo # bar baz\n"
+        "1: foo  # bar baz\n"
+      , renderTestCase "render test 4"
+        ( DocumentRoot [ Command "foo" (Just "bar") Nothing
+                       , Command "quux" (Just "baz") Nothing
+                       ]
+        )
+        ( unlines [ "1: foo   # bar"
+                  , "2: quux  # baz"
+                  ]
+        )
+      , renderTestCase "render test 5"
+        ( DocumentRoot [ Command "foo" Nothing Nothing
+                       , DocumentSection "h1"
+                         [ Command "bar" Nothing Nothing
+                         , Command "baz" Nothing Nothing
+                         , DocumentSection "h2" [Command "quux" Nothing Nothing]
+                         ]
+                       ]
+        )
+        ( unlines [ "1: foo"
+                  , "# h1"
+                  , "2: bar"
+                  , "3: baz"
+                  , "## h2"
+                  , "4: quux"
+                  ]
+        )
+      , renderTestCase "render test 6"
+        ( DocumentRoot [ Command "foo" (Just "foo doc") Nothing
+                       , DocumentSection "h1"
+                         [ Command "bar baz" (Just "bar baz doc") Nothing
+                         , Command "quux" (Just "quux doc") Nothing
+                         , DocumentSection "h2" [Command "flub" (Just "flub doc") Nothing]
+                         ]
+                       ]
+        )
+        ( unlines [ "1: foo  # foo doc"
+                  , "# h1"
+                  , "2: bar baz  # bar baz doc"
+                  , "3: quux     # quux doc"
+                  , "## h2"
+                  , "4: flub  # flub doc"
+                  ]
+        )
+      , renderTestCase "render test 7"
+        (DocumentRoot [Command "foo" Nothing (Just "bar")])
+        "bar: foo\n"
+      , renderTestCase "render test 8"
+        ( DocumentRoot [ Command "foo" (Just "foo doc") (Just "fooAlias")
+                       , DocumentSection "h1"
+                         [ Command "bar baz" (Just "bar baz doc") (Just "bb")
+                         , Command "quux" (Just "quux doc") Nothing
+                         , Command "bort" Nothing (Just "bort")
+                         , DocumentSection "h2" [Command "flub" (Just "flub doc") Nothing]
+                         ]
+                       ]
+        )
+        ( unlines [ "fooAlias: foo  # foo doc"
+                  , "# h1"
+                  , "bb:   bar baz  # bar baz doc"
+                  , "1:    quux     # quux doc"
+                  , "bort: bort"
+                  , "## h2"
+                  , "2: flub  # flub doc"
+                  ]
+        )
+
       ]
     ]
   ]

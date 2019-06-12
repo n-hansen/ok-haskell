@@ -10,7 +10,7 @@
 {-# LANGUAGE EmptyDataDecls     #-}
 {-# LANGUAGE FlexibleInstances  #-}
 {-# LANGUAGE GADTs              #-}
-{-# LANGUAGE MultiWayIf         #-}
+{-# LANGUAGE LambdaCase         #-}
 {-# LANGUAGE OverloadedStrings  #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TupleSections      #-}
@@ -19,13 +19,14 @@ module Ok where
 
 import           Control.Monad
 import           Data.Char
+import           Data.List
 import           Data.Maybe
-import           Data.Text                 as T
+import qualified Data.Text                 as T
 import           Data.Text.Prettyprint.Doc
 import           Data.Void
 import           Text.Megaparsec           as MP
 import           Text.Megaparsec.Char      as MP
-import           Turtle hiding (Parser)
+import           Turtle                    hiding (Parser)
 
 main :: IO ()
 main = echo "Hello World!"
@@ -71,13 +72,13 @@ cmdParser = do
 
   where
     commandStringParser :: Parser Text
-    commandStringParser = strip <$> takeWhileP (Just "command string") (and <$> sequence [(/= '#'), (/= '\n')])
+    commandStringParser = T.strip <$> takeWhileP (Just "command string") (and <$> sequence [(/= '#'), (/= '\n')])
 
     docStringParser :: Parser (Maybe Text)
     docStringParser = optional $ do
       takeWhile1P Nothing (== '#')
       ds <- takeWhileP (Just "doc string") (/= '\n')
-      return $ strip ds
+      return $ T.strip ds
 
     aliasParser :: Parser (Maybe Text)
     aliasParser = optional . try $ do
@@ -129,23 +130,59 @@ parseOkText = parseMaybe documentParser
 --- Document Rendering ---
 
 render :: OkDocument Root -> Doc Void
-render (DocumentRoot topLevelChildren) = go emptyDoc 1 1 topLevelChildren
+render (DocumentRoot topLevelChildren) = fst $ go emptyDoc 1 1 (computeOffsets topLevelChildren) topLevelChildren
   where
-    go :: Doc Void -> Int -> Int -> [OkDocument Child] -> Doc Void
-    go doc count depth elems =
-      case elems of
-        [] -> doc
-        Command name ds Nothing : rest ->
-          let line = pretty name
-                     & commandPrefix (show count)
-                     & commandSuffix ds
-          in
-            go (doc <> line) (count + 1) depth rest
+    dsPad = 2
+    aliasPad = 1
 
-    commandPrefix alias doc = pretty alias <> ":" <+> doc
-    commandSuffix ds doc =
-      let renderedDs = case ds of
-                         Nothing -> emptyDoc
-                         Just str -> " #" <+> (align . sep . fmap pretty . T.words $ str)
+    go :: Doc Void -> Int -> Int -> (Int, Int) -> [OkDocument Child] -> (Doc Void, Int)
+    go doc count depth offsets@(dsOffset, aliasOffset) elems =
+      let
+        commandPrefix :: Pretty p => p -> Doc a -> Doc a
+        commandPrefix alias doc =
+          width (pretty alias <> ":") (\w -> indent (aliasOffset - w) doc)
+
+        commandSuffix :: Maybe Text -> Doc a -> Doc a
+        commandSuffix ds doc =
+          case ds of
+            Nothing -> doc <> hardline
+            Just dsStr ->
+              width doc (\w -> indent (dsOffset - w + aliasOffset) $ "#" <+> (align . sep . fmap pretty . T.words $ dsStr))
+              <> hardline
       in
-        doc <> renderedDs <> hardline
+        case elems of
+          [] -> (doc, count)
+
+          Command name ds Nothing : rest ->
+            let line = pretty name
+                       & commandPrefix count
+                       & commandSuffix ds
+            in
+              go (doc <> line) (count + 1) depth offsets rest
+
+          Command name ds (Just alias) : rest ->
+            let line = pretty name
+                       & commandPrefix alias
+                       & commandSuffix ds
+            in
+              go (doc <> line) count depth offsets rest
+
+          DocumentSection title children : rest ->
+            let header = pretty (T.replicate depth "#") <+> pretty title <> hardline
+                (childDoc, count') = go (doc <> header) count (depth + 1) (computeOffsets children) children
+            in
+              go childDoc count' depth offsets rest
+
+
+    computeOffsets =
+      foldl' (\acc@(dso, ao) e -> case e of
+                                    Command cmd _ Nothing ->
+                                      ( max dso (T.length cmd + dsPad)
+                                      , ao
+                                      )
+                                    Command cmd _ (Just a) ->
+                                      ( max dso (T.length cmd + dsPad)
+                                      , max ao (T.length a + 1 + aliasPad)
+                                      )
+                                    _ -> acc
+             ) (0,2+aliasPad)
