@@ -2,15 +2,15 @@
 {- stack
   script
   --resolver lts-13.25
-  --package turtle
   --package text
   --package megaparsec
   --package prettyprinter
+  --package shelly
+  --package optparse-applicative
 -}
 {-# LANGUAGE EmptyDataDecls     #-}
 {-# LANGUAGE FlexibleInstances  #-}
 {-# LANGUAGE GADTs              #-}
-{-# LANGUAGE LambdaCase         #-}
 {-# LANGUAGE OverloadedStrings  #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TupleSections      #-}
@@ -19,18 +19,20 @@ module Ok where
 
 import           Control.Monad
 import           Data.Char
+import           Data.Function
 import           Data.List
 import           Data.Maybe
 import           Data.Text                 (Text)
 import qualified Data.Text                 as T
 import           Data.Text.Prettyprint.Doc
 import           Data.Void
+import qualified Options.Applicative       as Opt
+import           Shelly
 import           Text.Megaparsec           as MP
 import           Text.Megaparsec.Char      as MP
-import           Turtle                    hiding (Parser)
 
 main :: IO ()
-main = echo "Hello World!"
+main = undefined
 
 
 --- Types ---

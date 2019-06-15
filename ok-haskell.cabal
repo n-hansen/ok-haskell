@@ -19,10 +19,11 @@ executable ok
   ghc-options:         -main-is Ok.main
   default-language:    Haskell2010
   build-depends:       base >= 4.7 && < 5
-                     , turtle
                      , text
                      , megaparsec
                      , prettyprinter
+                     , shelly
+                     , optparse-applicative
 
 library
   hs-source-dirs:      src
@@ -33,6 +34,8 @@ library
                      , text
                      , megaparsec
                      , prettyprinter
+                     , shelly
+                     , optparse-applicative
 
 test-suite test
   default-language:    Haskell2010
@@ -47,3 +50,5 @@ test-suite test
                      , turtle
                      , megaparsec
                      , prettyprinter
+                     , shelly
+                     , optparse-applicative
