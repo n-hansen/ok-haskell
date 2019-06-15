@@ -21,6 +21,7 @@ import           Control.Monad
 import           Data.Char
 import           Data.List
 import           Data.Maybe
+import           Data.Text                 (Text)
 import qualified Data.Text                 as T
 import           Data.Text.Prettyprint.Doc
 import           Data.Void
@@ -40,9 +41,11 @@ data Child
 data OkDocument a where
   DocumentRoot :: [OkDocument Child] -- ^ Children
                -> OkDocument Root
+
   DocumentSection :: Text -- ^ Section name
                   -> [OkDocument Child] -- ^ Children
                   -> OkDocument Child
+
   Command :: Text -- ^ Command string
           -> Maybe Text -- ^ Doc string
           -> Maybe Text -- ^ Alias
