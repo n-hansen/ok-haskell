@@ -1,1 +1,3 @@
-src/Ok.hs # run the script
+# Main Project Commands
+run: src/Ok.hs # run the script
+tests: stack test --file-watch # start tests
