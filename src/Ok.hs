@@ -163,7 +163,7 @@ cmdParser = do
 
     aliasParser :: Parser (Maybe Text)
     aliasParser = optional . try $ do
-      a <- takeWhile1P (Just "alias") isAlphaNum
+      a <- takeWhile1P (Just "alias") (\c -> isAlphaNum c || c == '-' || c == '_')
       MP.char ':'
       MP.space
       return a
