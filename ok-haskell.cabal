@@ -6,7 +6,7 @@ version:             0.0.0.1
 license:             BSD3
 license-file:        LICENSE
 author:              Nick Hansen
---maintainer:          example@example.com
+-- maintainer:          example@example.com
 copyright:           2019 Nick Hansen
 category:            Console
 build-type:          Simple
@@ -33,7 +33,6 @@ library
   exposed-modules:     Ok
   default-language:    Haskell2010
   build-depends:       base >= 4.7 && < 5
-                     , turtle
                      , text
                      , megaparsec
                      , prettyprinter
@@ -53,11 +52,4 @@ test-suite test
                      , tasty >= 0.7
                      , tasty-hunit
                      , text
-                     , turtle
-                     , megaparsec
-                     , prettyprinter
-                     , prettyprinter-ansi-terminal
-                     , shelly
-                     , optparse-applicative
-                     , mtl
                      , containers
