@@ -46,6 +46,7 @@ main = parseOpts >>= runProgram
 
 --- Types ---
 
+
 type ErrorSh = ExceptT String Sh
 
 data RunMode = Display
@@ -73,8 +74,11 @@ deriving instance Show (OkDocument Root)
 deriving instance Eq (OkDocument Child)
 deriving instance Eq (OkDocument Root)
 
+type Parser = Parsec Void Text
+
 
 --- Top Level Functions ---
+
 
 runProgram :: RunMode -> IO ()
 runProgram mode = shelly . printErrors $ go mode
@@ -96,6 +100,7 @@ runProgram mode = shelly . printErrors $ go mode
 
 --- Command Line Opts ---
 
+
 parseOpts :: IO RunMode
 parseOpts = Opt.execParser $ Opt.info parser desc
   where
@@ -112,12 +117,9 @@ parseOpts = Opt.execParser $ Opt.info parser desc
 
     displayParser = pure Display
 
+
 --- File Parsing ---
 
-type Parser = Parsec Void Text
-
-endOfLine :: Parser ()
-endOfLine = void MP.newline <|> MP.eof
 
 cmdParser :: Parser (OkDocument Child)
 cmdParser = do
@@ -145,6 +147,7 @@ cmdParser = do
       MP.char ':'
       MP.space
       return a
+
 
 childrenParser :: Int -> Parser [OkDocument Child]
 childrenParser minLevel =
@@ -186,7 +189,13 @@ documentParser = DocumentRoot <$> childrenParser 1
 parseOkText :: String -> Text -> Either String (OkDocument Root)
 parseOkText filename = first errorBundlePretty . parse documentParser filename
 
+
+endOfLine :: Parser ()
+endOfLine = void MP.newline <|> MP.eof
+
+
 --- Document Rendering ---
+
 
 render :: OkDocument Root -> Doc AnsiStyle
 render (DocumentRoot topLevelChildren) = fst $ go emptyDoc 1 1 (computeOffsets topLevelChildren) topLevelChildren
@@ -248,7 +257,9 @@ render (DocumentRoot topLevelChildren) = fst $ go emptyDoc 1 1 (computeOffsets t
                                     _ -> acc
              ) (0,2+aliasPad)
 
+
 --- File I/O ---
+
 
 getOkFilePath :: ErrorSh FilePath
 getOkFilePath = do
@@ -257,6 +268,7 @@ getOkFilePath = do
   if exists
     then return path
     else throwError $ "Couldn't find file " <> show path
+
 
 readOkFile :: ErrorSh (OkDocument Root)
 readOkFile = do
