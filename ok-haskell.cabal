@@ -22,6 +22,7 @@ executable ok
                      , text
                      , megaparsec
                      , prettyprinter
+                     , prettyprinter-ansi-terminal
                      , shelly
                      , optparse-applicative
                      , mtl
@@ -35,6 +36,7 @@ library
                      , text
                      , megaparsec
                      , prettyprinter
+                     , prettyprinter-ansi-terminal
                      , shelly
                      , optparse-applicative
                      , mtl
@@ -52,6 +54,7 @@ test-suite test
                      , turtle
                      , megaparsec
                      , prettyprinter
+                     , prettyprinter-ansi-terminal
                      , shelly
                      , optparse-applicative
                      , mtl

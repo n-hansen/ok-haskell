@@ -5,6 +5,7 @@
   --package text
   --package megaparsec
   --package prettyprinter
+  --package prettyprinter-ansi-terminal
   --package shelly
   --package optparse-applicative
   --package mtl
@@ -26,16 +27,17 @@ import           Data.Char
 import           Data.Function
 import           Data.List
 import           Data.Maybe
-import           Data.Text                 (Text)
-import qualified Data.Text                 as T
+import           Data.Text                                 (Text)
+import qualified Data.Text                                 as T
 import           Data.Text.Prettyprint.Doc
+import           Data.Text.Prettyprint.Doc.Render.Terminal
 import           Data.Void
-import qualified Options.Applicative       as Opt
-import           Prelude                   hiding (FilePath)
+import qualified Options.Applicative                       as Opt
+import           Prelude                                   hiding (FilePath)
 import           Shelly
-import           Text.Megaparsec           as MP
-import           Text.Megaparsec.Char      as MP
-import           Text.Megaparsec.Error     as MP
+import           Text.Megaparsec                           as MP
+import           Text.Megaparsec.Char                      as MP
+import           Text.Megaparsec.Error                     as MP
 
 
 main :: IO ()
@@ -79,7 +81,7 @@ runProgram mode = shelly . printErrors $ go mode
   where
     go :: RunMode -> ErrorSh ()
     go Display =
-      undefined
+      lift . echo =<< renderStrict . layoutPretty defaultLayoutOptions . render <$> readOkFile
 
     go (GetCmd identifier) =
       undefined
@@ -186,13 +188,13 @@ parseOkText filename = first errorBundlePretty . parse documentParser filename
 
 --- Document Rendering ---
 
-render :: OkDocument Root -> Doc Void
+render :: OkDocument Root -> Doc ann
 render (DocumentRoot topLevelChildren) = fst $ go emptyDoc 1 1 (computeOffsets topLevelChildren) topLevelChildren
   where
     dsPad = 2
     aliasPad = 1
 
-    go :: Doc Void -> Int -> Int -> (Int, Int) -> [OkDocument Child] -> (Doc Void, Int)
+    go :: Doc ann -> Int -> Int -> (Int, Int) -> [OkDocument Child] -> (Doc ann, Int)
     go doc count depth offsets@(dsOffset, aliasOffset) elems =
       let
         commandPrefix :: Pretty p => p -> Doc a -> Doc a
