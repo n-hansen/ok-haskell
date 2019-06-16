@@ -7,6 +7,7 @@
   --package prettyprinter
   --package shelly
   --package optparse-applicative
+  --package mtl
 -}
 {-# LANGUAGE EmptyDataDecls     #-}
 {-# LANGUAGE FlexibleInstances  #-}
@@ -17,7 +18,10 @@
 {-# LANGUAGE TypeFamilies       #-}
 module Ok where
 
+import           Control.Applicative
 import           Control.Monad
+import           Control.Monad.Except
+import           Data.Bifunctor
 import           Data.Char
 import           Data.Function
 import           Data.List
@@ -27,15 +31,24 @@ import qualified Data.Text                 as T
 import           Data.Text.Prettyprint.Doc
 import           Data.Void
 import qualified Options.Applicative       as Opt
+import           Prelude                   hiding (FilePath)
 import           Shelly
 import           Text.Megaparsec           as MP
 import           Text.Megaparsec.Char      as MP
+import           Text.Megaparsec.Error     as MP
+
 
 main :: IO ()
-main = undefined
+main = parseOpts >>= runProgram
 
 
 --- Types ---
+
+type ErrorSh = ExceptT String Sh
+
+data RunMode = Display
+             | GetCmd Text
+             deriving (Show)
 
 data Root
 data Child
@@ -57,6 +70,45 @@ deriving instance Show (OkDocument Child)
 deriving instance Show (OkDocument Root)
 deriving instance Eq (OkDocument Child)
 deriving instance Eq (OkDocument Root)
+
+
+--- Top Level Functions ---
+
+runProgram :: RunMode -> IO ()
+runProgram mode = shelly . printErrors $ go mode
+  where
+    go :: RunMode -> ErrorSh ()
+    go Display =
+      undefined
+
+    go (GetCmd identifier) =
+      undefined
+
+    printErrors :: ErrorSh () -> Sh ()
+    printErrors errSh = do
+      result <- runExceptT errSh
+      case result of
+        Right () -> pure ()
+        Left err -> echo_err ("Error: " <> T.pack err)
+
+
+--- Command Line Opts ---
+
+parseOpts :: IO RunMode
+parseOpts = Opt.execParser $ Opt.info parser desc
+  where
+    desc =
+      Opt.fullDesc
+      <> Opt.header "ok -- makefiles for humans"
+
+    parser =
+      (getCmdParser <|> displayParser) <**> Opt.helper
+
+    getCmdParser =
+      GetCmd <$> Opt.strArgument ( Opt.metavar "COMMAND"
+                                 )
+
+    displayParser = pure Display
 
 --- File Parsing ---
 
@@ -129,8 +181,8 @@ documentParser :: Parser (OkDocument Root)
 documentParser = DocumentRoot <$> childrenParser 1
 
 
-parseOkText :: Text -> Maybe (OkDocument Root)
-parseOkText = parseMaybe documentParser
+parseOkText :: String -> Text -> Either String (OkDocument Root)
+parseOkText filename = first errorBundlePretty . parse documentParser filename
 
 --- Document Rendering ---
 
@@ -191,3 +243,18 @@ render (DocumentRoot topLevelChildren) = fst $ go emptyDoc 1 1 (computeOffsets t
                                       )
                                     _ -> acc
              ) (0,2+aliasPad)
+
+--- File I/O ---
+
+getOkFilePath :: ErrorSh FilePath
+getOkFilePath = do
+  path <- lift $ (</> (".ok" :: FilePath)) <$> pwd
+  exists <- lift $ test_f path
+  if exists
+    then return path
+    else throwError $ "Couldn't find file " <> show path
+
+readOkFile :: ErrorSh (OkDocument Root)
+readOkFile = do
+  okFile <- getOkFilePath
+  liftEither . parseOkText (show okFile) =<< lift (readfile okFile)
