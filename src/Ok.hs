@@ -75,7 +75,9 @@ runProgram mode = shelly . printErrors $ go mode
       result <- runExceptT errSh
       case result of
         Right () -> pure ()
-        Left err -> echo_err ("Error: " <> T.pack err)
+        Left err -> do
+          echo_err ("Ok Error: " <> T.pack err)
+          quietExit 1
 
 
 --- OkDocument ---
