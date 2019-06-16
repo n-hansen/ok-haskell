@@ -188,7 +188,7 @@ tests =
 
 
 parserTestCase name input expect =
-  testCase name $ parseOkText input @?= Just expect
+  testCase name $ parseOkText "" input @?= Right expect
 
 renderTestCase name document expect =
   testCase name $ (show $ render document) @?= expect
