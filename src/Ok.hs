@@ -9,6 +9,7 @@
   --package shelly
   --package optparse-applicative
   --package mtl
+  --package containers
 -}
 {-# LANGUAGE EmptyDataDecls     #-}
 {-# LANGUAGE FlexibleInstances  #-}
@@ -29,6 +30,8 @@ import           Data.Bifunctor
 import           Data.Char
 import           Data.Function
 import           Data.List
+import           Data.Map.Strict                           (Map)
+import qualified Data.Map.Strict                           as Map
 import           Data.Maybe
 import           Data.Text                                 (Text)
 import qualified Data.Text                                 as T
@@ -82,6 +85,7 @@ data Child
 
 data OkDocument a where
   DocumentRoot :: [OkDocument Child] -- ^ Children
+               -> Map Text Text -- ^ Lookup table
                -> OkDocument Root
 
   DocumentSection :: Text -- ^ Section name
@@ -134,13 +138,15 @@ cmdParser = do
   lift endOfLine
   if cs == mempty
     then failure Nothing mempty
-    else
-    case a of
-      Just alias -> return $ Command cs alias ds
-      Nothing -> do
-        alias <- gets $ T.pack . show
-        modify (+ 1)
-        return $ Command cs alias ds
+    else do
+    alias <- case a of
+               Just alias -> pure alias
+               Nothing -> do
+                 alias <- gets $ T.pack . show
+                 modify (+ 1)
+                 pure alias
+    tell $ Map.singleton alias cs
+    return $ Command cs alias ds
 
   where
     commandStringParser :: Parser Text
@@ -195,7 +201,7 @@ sectionParser = do
 
 
 documentParser :: Parser (OkDocument Root)
-documentParser = DocumentRoot . fst <$> evalRWST childrenParser 0 1
+documentParser = uncurry DocumentRoot <$> evalRWST childrenParser 0 1
 
 
 parseOkText :: String -> Text -> Either String (OkDocument Root)
@@ -210,7 +216,7 @@ endOfLine = void MP.newline <|> MP.eof
 
 
 render :: OkDocument Root -> Doc AnsiStyle
-render (DocumentRoot topLevelChildren) = go emptyDoc 1 (computeOffsets topLevelChildren) topLevelChildren
+render (DocumentRoot topLevelChildren _) = go emptyDoc 1 (computeOffsets topLevelChildren) topLevelChildren
   where
     dsPad = 2
     aliasPad = 1

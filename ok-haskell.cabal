@@ -26,6 +26,7 @@ executable ok
                      , shelly
                      , optparse-applicative
                      , mtl
+                     , containers
 
 library
   hs-source-dirs:      src
@@ -40,6 +41,7 @@ library
                      , shelly
                      , optparse-applicative
                      , mtl
+                     , containers
 
 test-suite test
   default-language:    Haskell2010
@@ -58,3 +60,4 @@ test-suite test
                      , shelly
                      , optparse-applicative
                      , mtl
+                     , containers
