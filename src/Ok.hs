@@ -22,6 +22,9 @@ module Ok where
 import           Control.Applicative
 import           Control.Monad
 import           Control.Monad.Except
+import           Control.Monad.Reader
+import           Control.Monad.RWS.Strict
+import           Control.Monad.State.Strict
 import           Data.Bifunctor
 import           Data.Char
 import           Data.Function
@@ -40,11 +43,11 @@ import           Text.Megaparsec.Char                      as MP
 import           Text.Megaparsec.Error                     as MP
 
 
+--- Top Level Functions ---
+
+
 main :: IO ()
 main = parseOpts >>= runProgram
-
-
---- Types ---
 
 
 type ErrorSh = ExceptT String Sh
@@ -52,32 +55,6 @@ type ErrorSh = ExceptT String Sh
 data RunMode = Display
              | GetCmd Text
              deriving (Show)
-
-data Root
-data Child
-
-data OkDocument a where
-  DocumentRoot :: [OkDocument Child] -- ^ Children
-               -> OkDocument Root
-
-  DocumentSection :: Text -- ^ Section name
-                  -> [OkDocument Child] -- ^ Children
-                  -> OkDocument Child
-
-  Command :: Text -- ^ Command string
-          -> Maybe Text -- ^ Doc string
-          -> Maybe Text -- ^ Alias
-          -> OkDocument Child
-
-deriving instance Show (OkDocument Child)
-deriving instance Show (OkDocument Root)
-deriving instance Eq (OkDocument Child)
-deriving instance Eq (OkDocument Root)
-
-type Parser = Parsec Void Text
-
-
---- Top Level Functions ---
 
 
 runProgram :: RunMode -> IO ()
@@ -120,16 +97,43 @@ parseOpts = Opt.execParser $ Opt.info parser desc
 
 --- File Parsing ---
 
+data Root
+data Child
 
-cmdParser :: Parser (OkDocument Child)
+data OkDocument a where
+  DocumentRoot :: [OkDocument Child] -- ^ Children
+               -> OkDocument Root
+
+  DocumentSection :: Text -- ^ Section name
+                  -> [OkDocument Child] -- ^ Children
+                  -> OkDocument Child
+
+  Command :: Text -- ^ Command string
+          -> Maybe Text -- ^ Doc string
+          -> Maybe Text -- ^ Alias
+          -> OkDocument Child
+
+deriving instance Show (OkDocument Child)
+deriving instance Show (OkDocument Root)
+deriving instance Eq (OkDocument Child)
+deriving instance Eq (OkDocument Root)
+
+type Parser = Parsec Void Text
+type ChildParser = RWST Int [(Text,Text)] Int Parser
+
+
+cmdParser :: ChildParser (OkDocument Child)
 cmdParser = do
-  a <- aliasParser
-  cs <- commandStringParser
-  ds <- docStringParser
-  endOfLine
+  a <- lift aliasParser
+  cs <- lift commandStringParser
+  ds <- lift docStringParser
+  lift endOfLine
   if cs == mempty
     then failure Nothing mempty
-    else return $ Command cs ds a
+    else do
+    when (isJust a) $
+      modify (+ 1)
+    return $ Command cs ds a
 
   where
     commandStringParser :: Parser Text
@@ -149,13 +153,13 @@ cmdParser = do
       return a
 
 
-childrenParser :: Int -> Parser [OkDocument Child]
-childrenParser minLevel =
+childrenParser :: ChildParser [OkDocument Child]
+childrenParser =
   fmap catMaybes
   . MP.many
   . MP.choice
   $ [ Just <$> try cmdParser
-    , Just <$> try (sectionParser minLevel)
+    , Just <$> try sectionParser
     , try emptyLine
     ]
 
@@ -166,24 +170,25 @@ childrenParser minLevel =
       return Nothing
 
 
-sectionParser :: Int -> Parser (OkDocument Child)
-sectionParser minLevel = do
+sectionParser :: ChildParser (OkDocument Child)
+sectionParser = do
   (heading, indent) <- headingParser
-  children <- childrenParser (indent + 1)
+  children <- local (const indent) childrenParser
   return $ DocumentSection heading children
 
   where
-    headingParser :: Parser (Text, Int)
+    headingParser :: ChildParser (Text, Int)
     headingParser = do
-      indent <- T.length <$> takeWhile1P (Just "heading prefix") (== '#')
+      currLevel <- ask
+      indent <- lift $ T.length <$> takeWhile1P (Just "heading prefix") (== '#')
       takeWhileP Nothing (== ' ')
-      if indent >= minLevel
-        then (, indent) <$> takeWhileP (Just "heading") (/= '\n') <* endOfLine
-        else failure Nothing mempty
+      lift $ if indent > currLevel
+             then (, indent) <$> takeWhileP (Just "heading") (/= '\n') <* endOfLine
+             else failure Nothing mempty
 
 
 documentParser :: Parser (OkDocument Root)
-documentParser = DocumentRoot <$> childrenParser 1
+documentParser = DocumentRoot . fst <$> evalRWST childrenParser 0 1
 
 
 parseOkText :: String -> Text -> Either String (OkDocument Root)
