@@ -188,25 +188,26 @@ parseOkText filename = first errorBundlePretty . parse documentParser filename
 
 --- Document Rendering ---
 
-render :: OkDocument Root -> Doc ann
+render :: OkDocument Root -> Doc AnsiStyle
 render (DocumentRoot topLevelChildren) = fst $ go emptyDoc 1 1 (computeOffsets topLevelChildren) topLevelChildren
   where
     dsPad = 2
     aliasPad = 1
 
-    go :: Doc ann -> Int -> Int -> (Int, Int) -> [OkDocument Child] -> (Doc ann, Int)
+    go :: Doc AnsiStyle -> Int -> Int -> (Int, Int) -> [OkDocument Child] -> (Doc AnsiStyle, Int)
     go doc count depth offsets@(dsOffset, aliasOffset) elems =
       let
-        commandPrefix :: Pretty p => p -> Doc a -> Doc a
+        commandPrefix :: Pretty p => p -> Doc AnsiStyle -> Doc AnsiStyle
         commandPrefix alias doc =
-          width (pretty alias <> ":") (\w -> indent (aliasOffset - w) doc)
+          width (annotate (color Green) $ pretty alias <> ":") (\w -> indent (aliasOffset - w) doc)
 
-        commandSuffix :: Maybe Text -> Doc a -> Doc a
+        commandSuffix :: Maybe Text -> Doc AnsiStyle -> Doc AnsiStyle
         commandSuffix ds doc =
           case ds of
             Nothing -> doc <> hardline
             Just dsStr ->
-              width doc (\w -> indent (dsOffset - w + aliasOffset) $ "#" <+> (align . sep . fmap pretty . T.words $ dsStr))
+              width doc (\w -> annotate (color Blue) $
+                               indent (dsOffset - w + aliasOffset) $ "#" <+> (align . sep . fmap pretty . T.words $ dsStr))
               <> hardline
       in
         case elems of
@@ -227,7 +228,8 @@ render (DocumentRoot topLevelChildren) = fst $ go emptyDoc 1 1 (computeOffsets t
               go (doc <> line) count depth offsets rest
 
           DocumentSection title children : rest ->
-            let header = pretty (T.replicate depth "#") <+> pretty title <> hardline
+            let header = annotate (color Red) $
+                         pretty (T.replicate depth "#") <+> pretty title <> hardline
                 (childDoc, count') = go (doc <> header) count (depth + 1) (computeOffsets children) children
             in
               go childDoc count' depth offsets rest
