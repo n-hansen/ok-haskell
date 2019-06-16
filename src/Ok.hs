@@ -75,6 +75,30 @@ runProgram mode = shelly . printErrors $ go mode
         Left err -> echo_err ("Error: " <> T.pack err)
 
 
+--- OkDocument ---
+
+data Root
+data Child
+
+data OkDocument a where
+  DocumentRoot :: [OkDocument Child] -- ^ Children
+               -> OkDocument Root
+
+  DocumentSection :: Text -- ^ Section name
+                  -> [OkDocument Child] -- ^ Children
+                  -> OkDocument Child
+
+  Command :: Text -- ^ Command string
+          -> Text -- ^ Alias
+          -> Maybe Text -- ^ Doc string
+          -> OkDocument Child
+
+deriving instance Show (OkDocument Child)
+deriving instance Show (OkDocument Root)
+deriving instance Eq (OkDocument Child)
+deriving instance Eq (OkDocument Root)
+
+
 --- Command Line Opts ---
 
 
@@ -97,29 +121,9 @@ parseOpts = Opt.execParser $ Opt.info parser desc
 
 --- File Parsing ---
 
-data Root
-data Child
-
-data OkDocument a where
-  DocumentRoot :: [OkDocument Child] -- ^ Children
-               -> OkDocument Root
-
-  DocumentSection :: Text -- ^ Section name
-                  -> [OkDocument Child] -- ^ Children
-                  -> OkDocument Child
-
-  Command :: Text -- ^ Command string
-          -> Maybe Text -- ^ Doc string
-          -> Maybe Text -- ^ Alias
-          -> OkDocument Child
-
-deriving instance Show (OkDocument Child)
-deriving instance Show (OkDocument Root)
-deriving instance Eq (OkDocument Child)
-deriving instance Eq (OkDocument Root)
 
 type Parser = Parsec Void Text
-type ChildParser = RWST Int [(Text,Text)] Int Parser
+type ChildParser = RWST Int (Map Text Text) Int Parser
 
 
 cmdParser :: ChildParser (OkDocument Child)
@@ -130,10 +134,13 @@ cmdParser = do
   lift endOfLine
   if cs == mempty
     then failure Nothing mempty
-    else do
-    when (isJust a) $
-      modify (+ 1)
-    return $ Command cs ds a
+    else
+    case a of
+      Just alias -> return $ Command cs alias ds
+      Nothing -> do
+        alias <- gets $ T.pack . show
+        modify (+ 1)
+        return $ Command cs alias ds
 
   where
     commandStringParser :: Parser Text
@@ -203,15 +210,15 @@ endOfLine = void MP.newline <|> MP.eof
 
 
 render :: OkDocument Root -> Doc AnsiStyle
-render (DocumentRoot topLevelChildren) = fst $ go emptyDoc 1 1 (computeOffsets topLevelChildren) topLevelChildren
+render (DocumentRoot topLevelChildren) = go emptyDoc 1 (computeOffsets topLevelChildren) topLevelChildren
   where
     dsPad = 2
     aliasPad = 1
 
-    go :: Doc AnsiStyle -> Int -> Int -> (Int, Int) -> [OkDocument Child] -> (Doc AnsiStyle, Int)
-    go doc count depth offsets@(dsOffset, aliasOffset) elems =
+    go :: Doc AnsiStyle -> Int -> (Int, Int) -> [OkDocument Child] -> Doc AnsiStyle
+    go doc depth offsets@(dsOffset, aliasOffset) elems =
       let
-        commandPrefix :: Pretty p => p -> Doc AnsiStyle -> Doc AnsiStyle
+        commandPrefix :: Text -> Doc AnsiStyle -> Doc AnsiStyle
         commandPrefix alias doc =
           width (annotate (color Green) $ pretty alias <> ":") (\w -> indent (aliasOffset - w) doc)
 
@@ -225,37 +232,26 @@ render (DocumentRoot topLevelChildren) = fst $ go emptyDoc 1 1 (computeOffsets t
               <> hardline
       in
         case elems of
-          [] -> (doc, count)
+          [] -> doc
 
-          Command name ds Nothing : rest ->
-            let line = pretty name
-                       & commandPrefix count
-                       & commandSuffix ds
-            in
-              go (doc <> line) (count + 1) depth offsets rest
-
-          Command name ds (Just alias) : rest ->
+          Command name alias ds : rest ->
             let line = pretty name
                        & commandPrefix alias
                        & commandSuffix ds
             in
-              go (doc <> line) count depth offsets rest
+              go (doc <> line) depth offsets rest
 
           DocumentSection title children : rest ->
             let header = annotate (color Red) $
                          pretty (T.replicate depth "#") <+> pretty title <> hardline
-                (childDoc, count') = go (doc <> header) count (depth + 1) (computeOffsets children) children
+                childDoc = go (doc <> header) (depth + 1) (computeOffsets children) children
             in
-              go childDoc count' depth offsets rest
+              go childDoc depth offsets rest
 
 
     computeOffsets =
       foldl' (\acc@(dso, ao) e -> case e of
-                                    Command cmd _ Nothing ->
-                                      ( max dso (T.length cmd + dsPad)
-                                      , ao
-                                      )
-                                    Command cmd _ (Just a) ->
+                                    Command cmd a _ ->
                                       ( max dso (T.length cmd + dsPad)
                                       , max ao (T.length a + 1 + aliasPad)
                                       )

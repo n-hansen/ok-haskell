@@ -14,26 +14,26 @@ tests =
     [ testGroup ".ok file parser"
       [ parserTestCase "parser test 1"
         "foo bar"
-        $ DocumentRoot [Command "foo bar" Nothing Nothing]
+        $ DocumentRoot [Command "foo bar" "1" Nothing]
       , parserTestCase "parser test 2"
         "foo bar # apply foo to bar"
-        $ DocumentRoot [Command "foo bar" (Just "apply foo to bar") Nothing]
+        $ DocumentRoot [Command "foo bar" "1" (Just "apply foo to bar")]
       , parserTestCase "parser test 3"
         ( T.unlines [ "foo bar # apply foo to bar"
                     , "baz"
                     , "quux -v # verbose quux"
                     ]
         )
-        $ DocumentRoot [ Command "foo bar" (Just "apply foo to bar") Nothing
-                       , Command "baz" Nothing Nothing
-                       , Command "quux -v" (Just "verbose quux") Nothing
+        $ DocumentRoot [ Command "foo bar" "1" (Just "apply foo to bar")
+                       , Command "baz" "2" Nothing
+                       , Command "quux -v" "3" (Just "verbose quux")
                        ]
       , parserTestCase "parser test 4"
         ( T.unlines [ "# section"
                     , "foo bar"
                     ]
         )
-        $ DocumentRoot [DocumentSection "section" [Command "foo bar" Nothing Nothing]]
+        $ DocumentRoot [DocumentSection "section" [Command "foo bar" "1" Nothing]]
       , parserTestCase "parser test 5"
         ( T.unlines [ "#section"
                     , "foo bar # apply foo to bar"
@@ -43,9 +43,9 @@ tests =
                     ]
         )
         $ DocumentRoot
-        [ DocumentSection "section" [ Command "foo bar" (Just "apply foo to bar") Nothing
-                                    , Command "baz" Nothing (Just "flub")
-                                    , DocumentSection "subsection" [Command "quux -v" (Just "verbose quux") (Just "bort")]
+        [ DocumentSection "section" [ Command "foo bar" "1" (Just "apply foo to bar")
+                                    , Command "baz" "flub" Nothing
+                                    , DocumentSection "subsection" [Command "quux -v" "bort" (Just "verbose quux")]
                                     ]
         ]
       , parserTestCase "parser test 6"
@@ -61,31 +61,31 @@ tests =
                     ]
         )
         $ DocumentRoot
-        [ Command "foo" Nothing Nothing
-        , DocumentSection "h1" [ Command "bar" Nothing Nothing
+        [ Command "foo" "1" Nothing
+        , DocumentSection "h1" [ Command "bar" "2" Nothing
                                , DocumentSection "h2"
-                                 [Command "baz" Nothing Nothing]
+                                 [Command "baz" "3" Nothing]
                                , DocumentSection "h3"
-                                 [Command "quux" Nothing Nothing]
+                                 [Command "quux" "4" Nothing]
                                ]
-        , DocumentSection "h4" [Command "flub" Nothing Nothing]
+        , DocumentSection "h4" [Command "flub" "5" Nothing]
         ]
       , parserTestCase "parser test 7"
         "foo\n\nbar\n\n  \nbaz"
         $ DocumentRoot
-        [ Command "foo" Nothing Nothing
-        , Command "bar" Nothing Nothing
-        , Command "baz" Nothing Nothing
+        [ Command "foo" "1" Nothing
+        , Command "bar" "2" Nothing
+        , Command "baz" "3" Nothing
         ]
       ]
 
     , testGroup "document render tests"
       [ renderTestCase "render test 1"
-        (DocumentRoot [Command "foo" Nothing Nothing])
+        (DocumentRoot [Command "foo" "1" Nothing])
         "1: foo\n"
       , renderTestCase "render test 2"
-        ( DocumentRoot [ Command "foo" Nothing Nothing
-                       , Command "bar" Nothing Nothing
+        ( DocumentRoot [ Command "foo" "1" Nothing
+                       , Command "bar" "2" Nothing
                        ]
         )
         ( unlines [ "1: foo"
@@ -93,11 +93,11 @@ tests =
                   ]
         )
       , renderTestCase "render test 3"
-        (DocumentRoot [Command "foo" (Just "bar baz") Nothing])
+        (DocumentRoot [Command "foo" "1" (Just "bar baz")])
         "1: foo  # bar baz\n"
       , renderTestCase "render test 4"
-        ( DocumentRoot [ Command "foo" (Just "bar") Nothing
-                       , Command "quux" (Just "baz") Nothing
+        ( DocumentRoot [ Command "foo" "1" (Just "bar")
+                       , Command "quux""2" (Just "baz")
                        ]
         )
         ( unlines [ "1: foo   # bar"
@@ -105,11 +105,11 @@ tests =
                   ]
         )
       , renderTestCase "render test 5"
-        ( DocumentRoot [ Command "foo" Nothing Nothing
+        ( DocumentRoot [ Command "foo" "1" Nothing
                        , DocumentSection "h1"
-                         [ Command "bar" Nothing Nothing
-                         , Command "baz" Nothing Nothing
-                         , DocumentSection "h2" [Command "quux" Nothing Nothing]
+                         [ Command "bar" "2" Nothing
+                         , Command "baz" "3" Nothing
+                         , DocumentSection "h2" [Command "quux" "4" Nothing]
                          ]
                        ]
         )
@@ -122,11 +122,11 @@ tests =
                   ]
         )
       , renderTestCase "render test 6"
-        ( DocumentRoot [ Command "foo" (Just "foo doc") Nothing
+        ( DocumentRoot [ Command "foo" "1" (Just "foo doc")
                        , DocumentSection "h1"
-                         [ Command "bar baz" (Just "bar baz doc") Nothing
-                         , Command "quux" (Just "quux doc") Nothing
-                         , DocumentSection "h2" [Command "flub" (Just "flub doc") Nothing]
+                         [ Command "bar baz" "2" (Just "bar baz doc")
+                         , Command "quux" "3" (Just "quux doc")
+                         , DocumentSection "h2" [Command "flub" "4" (Just "flub doc")]
                          ]
                        ]
         )
@@ -139,15 +139,15 @@ tests =
                   ]
         )
       , renderTestCase "render test 7"
-        (DocumentRoot [Command "foo" Nothing (Just "bar")])
+        (DocumentRoot [Command "foo" "bar" Nothing])
         "bar: foo\n"
       , renderTestCase "render test 8"
-        ( DocumentRoot [ Command "foo" (Just "foo doc") (Just "fooAlias")
+        ( DocumentRoot [ Command "foo" "fooAlias" (Just "foo doc")
                        , DocumentSection "h1"
-                         [ Command "bar baz" (Just "bar baz doc") (Just "bb")
-                         , Command "quux" (Just "quux doc") Nothing
-                         , Command "bort" Nothing (Just "bort")
-                         , DocumentSection "h2" [Command "flub" (Just "flub doc") Nothing]
+                         [ Command "bar baz" "bb" (Just "bar baz doc")
+                         , Command "quux" "1" (Just "quux doc")
+                         , Command "bort" "bort" Nothing
+                         , DocumentSection "h2" [Command "flub" "2" (Just "flub doc")]
                          ]
                        ]
         )
@@ -161,14 +161,14 @@ tests =
                   ]
         )
       , renderTestCase "render test 9"
-        ( DocumentRoot [ Command "foo" Nothing Nothing
-                       , DocumentSection "h1" [ Command "bar" Nothing Nothing
+        ( DocumentRoot [ Command "foo" "1" Nothing
+                       , DocumentSection "h1" [ Command "bar" "2" Nothing
                                               , DocumentSection "h2"
-                                                [Command "baz" Nothing Nothing]
+                                                [Command "baz" "3" Nothing]
                                               , DocumentSection "h3"
-                                                [Command "quux" Nothing Nothing]
+                                                [Command "quux" "4" Nothing]
                                               ]
-                       , DocumentSection "h4" [Command "flub" Nothing Nothing]
+                       , DocumentSection "h4" [Command "flub" "5" Nothing]
                        ]
         )
         ( unlines [ "1: foo"
