@@ -68,7 +68,7 @@ runProgram mode = shelly . printErrors $ go mode
       lift . echo =<< renderStrict . layoutPretty defaultLayoutOptions . render <$> readOkFile
 
     go (GetCmd identifier) =
-      undefined
+      lift . echo_n =<< lookupCommand identifier =<< readOkFile
 
     printErrors :: ErrorSh () -> Sh ()
     printErrors errSh = do
@@ -79,6 +79,7 @@ runProgram mode = shelly . printErrors $ go mode
 
 
 --- OkDocument ---
+
 
 data Root
 data Child
@@ -281,3 +282,13 @@ readOkFile :: ErrorSh (OkDocument Root)
 readOkFile = do
   okFile <- getOkFilePath
   liftEither . parseOkText (show okFile) =<< lift (readfile okFile)
+
+
+--- Command Execution ---
+
+
+lookupCommand :: Text -> OkDocument Root -> ErrorSh Text
+lookupCommand ref (DocumentRoot _ table) =
+  case Map.lookup ref table of
+    Nothing -> throwError $ "Couldn't find command " <> T.unpack ref
+    Just cmd -> pure cmd
