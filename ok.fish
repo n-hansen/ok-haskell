@@ -1,9 +1,9 @@
-set OK_PATH "~/bin/Ok.hs"
+set -g $ok_path "~/bin/Ok.hs"
 
 function ok
     if test (count $argv) -gt 0
-        eval (eval "$OK_PATH" $argv)
+        eval (eval "$ok_path" $argv)
     else
-        eval "$OK_PATH"
+        eval "$ok_path"
     end
 end

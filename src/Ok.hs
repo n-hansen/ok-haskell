@@ -65,7 +65,7 @@ runProgram mode = shelly . printErrors $ go mode
   where
     go :: RunMode -> ErrorSh ()
     go Display =
-      lift . echo =<< renderStrict . layoutPretty defaultLayoutOptions . render <$> readOkFile
+      lift . echo_n =<< renderStrict . layoutPretty defaultLayoutOptions . render <$> readOkFile
 
     go (GetCmd identifier) =
       lift . echo_n =<< lookupCommand identifier =<< readOkFile
@@ -115,6 +115,7 @@ parseOpts = Opt.execParser $ Opt.info parser desc
     desc =
       Opt.fullDesc
       <> Opt.header "ok -- makefiles for humans"
+      <> Opt.failureCode 1
 
     parser =
       (getCmdParser <|> displayParser) <**> Opt.helper
