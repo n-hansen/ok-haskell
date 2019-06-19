@@ -10,6 +10,7 @@
   --package optparse-applicative
   --package mtl
   --package containers
+  --package system-filepath
 -}
 {-# LANGUAGE EmptyDataDecls     #-}
 {-# LANGUAGE FlexibleContexts   #-}
@@ -39,6 +40,7 @@ import qualified Data.Text                                 as T
 import           Data.Text.Prettyprint.Doc
 import           Data.Text.Prettyprint.Doc.Render.Terminal
 import           Data.Void
+import qualified Filesystem.Path                           as FP
 import qualified Options.Applicative                       as Opt
 import           Prelude                                   hiding (FilePath)
 import           Shelly.Lifted
@@ -78,6 +80,9 @@ runProgram opts = shelly . flip runReaderT opts . printErrors $ go
       case rm of
         Display ->
           echo_n =<< renderStrict . layoutPretty defaultLayoutOptions . render <$> readOkFile
+
+        GetOkLocation ->
+          echo_n =<< toTextIgnore . FP.directory <$> getOkFilePath
 
         GetCmd identifier ->
           echo_n =<< lookupCommand identifier =<< readOkFile
@@ -130,7 +135,11 @@ parseOpts = Opt.execParser $ Opt.info parser desc
 
     parser =
       RunOpts
-      <$> ( GetCmd <$> Opt.strArgument (Opt.metavar "COMMAND")
+      <$> ( Opt.flag' GetOkLocation ( Opt.long "locate"
+                                      <> Opt.short 'l'
+                                      <> Opt.help "Return the directory with .ok file (probably use with -s)"
+                                    )
+            <|> GetCmd <$> Opt.strArgument (Opt.metavar "COMMAND")
             <|> pure Display
           )
       <*> Opt.switch ( Opt.long "search"
@@ -293,9 +302,9 @@ getOkFilePath = pwd >>= checkDir
         else do
         canRecurse <- asks searchAncestors
         if not canRecurse
-          then throwError $ "Couldn't find file " <> show filePath
+          then throwError $ "Couldn't find file " <> show (toTextIgnore filePath)
           else do
-          parent <- canonicalize $ path </> (".." :: FilePath)
+          let parent = FP.parent path
           parentExists <- (&&) (parent /= path)
                           <$> test_d parent
           if parentExists
