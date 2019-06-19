@@ -12,6 +12,7 @@
   --package containers
 -}
 {-# LANGUAGE EmptyDataDecls     #-}
+{-# LANGUAGE FlexibleContexts   #-}
 {-# LANGUAGE FlexibleInstances  #-}
 {-# LANGUAGE GADTs              #-}
 {-# LANGUAGE OverloadedStrings  #-}
@@ -63,7 +64,7 @@ data RunMode = Display
              | GetCmd Text
              deriving (Show)
 
-data RunOpts = RunOpts { runMode :: RunMode
+data RunOpts = RunOpts { runMode         :: RunMode
                        , searchAncestors :: Bool
                        } deriving (Show)
 
@@ -76,12 +77,10 @@ runProgram opts = shelly . flip runReaderT opts . printErrors $ go
       rm <- asks runMode
       case rm of
         Display ->
-          echo_n =<< renderStrict . layoutPretty defaultLayoutOptions . render <$> okFile
+          echo_n =<< renderStrict . layoutPretty defaultLayoutOptions . render <$> readOkFile
 
         GetCmd identifier ->
-          echo_n =<< lookupCommand identifier =<< okFile
-
-    okFile = readOkFile
+          echo_n =<< lookupCommand identifier =<< readOkFile
 
     printErrors errSh = do
       result <- runExceptT errSh
@@ -284,12 +283,24 @@ render (DocumentRoot topLevelChildren _) = go emptyDoc 1 (computeOffsets topLeve
 
 
 getOkFilePath :: OkApp FilePath
-getOkFilePath = do
-  path <- (</> (".ok" :: FilePath)) <$> pwd
-  exists <- test_f path
-  if exists
-    then return path
-    else throwError $ "Couldn't find file " <> show path
+getOkFilePath = pwd >>= checkDir
+  where
+    checkDir path = do
+      let filePath = path </> (".ok" :: FilePath)
+      exists <- test_f filePath
+      if exists
+        then return filePath
+        else do
+        canRecurse <- asks searchAncestors
+        if not canRecurse
+          then throwError $ "Couldn't find file " <> show filePath
+          else do
+          parent <- canonicalize $ path </> (".." :: FilePath)
+          parentExists <- (&&) (parent /= path)
+                          <$> test_d parent
+          if parentExists
+            then checkDir parent
+            else throwError $ "Couldn't find an .ok file"
 
 
 readOkFile :: OkApp (OkDocument Root)
