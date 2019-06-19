@@ -1,4 +1,4 @@
-set -g $ok_path "~/bin/Ok.hs"
+set -g ok_path "~/bin/Ok.hs"
 
 function ok
     if test (count $argv) -gt 0

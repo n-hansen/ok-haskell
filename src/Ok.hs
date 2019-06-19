@@ -40,7 +40,7 @@ import           Data.Text.Prettyprint.Doc.Render.Terminal
 import           Data.Void
 import qualified Options.Applicative                       as Opt
 import           Prelude                                   hiding (FilePath)
-import           Shelly
+import           Shelly.Lifted
 import           Text.Megaparsec                           as MP
 import           Text.Megaparsec.Char                      as MP
 import           Text.Megaparsec.Error                     as MP
@@ -53,24 +53,36 @@ main :: IO ()
 main = parseOpts >>= runProgram
 
 
-type ErrorSh = ExceptT String Sh
+type OkApp = ExceptT String (ReaderT RunOpts Sh)
+
+instance MonadSh OkApp where
+  liftSh = lift . liftSh
 
 data RunMode = Display
+             | GetOkLocation
              | GetCmd Text
              deriving (Show)
 
+data RunOpts = RunOpts { runMode :: RunMode
+                       , searchAncestors :: Bool
+                       } deriving (Show)
 
-runProgram :: RunMode -> IO ()
-runProgram mode = shelly . printErrors $ go mode
+
+runProgram :: RunOpts -> IO ()
+runProgram opts = shelly . flip runReaderT opts . printErrors $ go
   where
-    go :: RunMode -> ErrorSh ()
-    go Display =
-      lift . echo_n =<< renderStrict . layoutPretty defaultLayoutOptions . render <$> readOkFile
+    go :: OkApp ()
+    go = do
+      rm <- asks runMode
+      case rm of
+        Display ->
+          echo_n =<< renderStrict . layoutPretty defaultLayoutOptions . render <$> okFile
 
-    go (GetCmd identifier) =
-      lift . echo_n =<< lookupCommand identifier =<< readOkFile
+        GetCmd identifier ->
+          echo_n =<< lookupCommand identifier =<< okFile
 
-    printErrors :: ErrorSh () -> Sh ()
+    okFile = readOkFile
+
     printErrors errSh = do
       result <- runExceptT errSh
       case result of
@@ -109,7 +121,7 @@ deriving instance Eq (OkDocument Root)
 --- Command Line Opts ---
 
 
-parseOpts :: IO RunMode
+parseOpts :: IO RunOpts
 parseOpts = Opt.execParser $ Opt.info parser desc
   where
     desc =
@@ -118,13 +130,15 @@ parseOpts = Opt.execParser $ Opt.info parser desc
       <> Opt.failureCode 1
 
     parser =
-      (getCmdParser <|> displayParser) <**> Opt.helper
-
-    getCmdParser =
-      GetCmd <$> Opt.strArgument ( Opt.metavar "COMMAND"
-                                 )
-
-    displayParser = pure Display
+      RunOpts
+      <$> ( GetCmd <$> Opt.strArgument (Opt.metavar "COMMAND")
+            <|> pure Display
+          )
+      <*> Opt.switch ( Opt.long "search"
+                       <> Opt.short 's'
+                       <> Opt.help "Search parent directories for .ok file"
+                     )
+      <**> Opt.helper
 
 
 --- File Parsing ---
@@ -136,9 +150,9 @@ type ChildParser = RWST Int (Map Text Text) Int Parser
 
 cmdParser :: ChildParser (OkDocument Child)
 cmdParser = do
-  a <- lift aliasParser
-  cs <- lift commandStringParser
-  ds <- lift docStringParser
+  a <- aliasParser
+  cs <- commandStringParser
+  ds <- docStringParser
   lift endOfLine
   if cs == mempty
     then failure Nothing mempty
@@ -153,16 +167,13 @@ cmdParser = do
     return $ Command cs alias ds
 
   where
-    commandStringParser :: Parser Text
     commandStringParser = T.strip <$> takeWhileP (Just "command string") (and <$> sequence [(/= '#'), (/= '\n')])
 
-    docStringParser :: Parser (Maybe Text)
     docStringParser = optional $ do
       takeWhile1P Nothing (== '#')
       ds <- takeWhileP (Just "doc string") (/= '\n')
       return $ T.strip ds
 
-    aliasParser :: Parser (Maybe Text)
     aliasParser = optional . try $ do
       a <- takeWhile1P (Just "alias") (\c -> isAlphaNum c || c == '-' || c == '_')
       MP.char ':'
@@ -197,11 +208,11 @@ sectionParser = do
     headingParser :: ChildParser (Text, Int)
     headingParser = do
       currLevel <- ask
-      indent <- lift $ T.length <$> takeWhile1P (Just "heading prefix") (== '#')
+      indent <- T.length <$> takeWhile1P (Just "heading prefix") (== '#')
       takeWhileP Nothing (== ' ')
-      lift $ if indent > currLevel
-             then (, indent) <$> takeWhileP (Just "heading") (/= '\n') <* endOfLine
-             else failure Nothing mempty
+      if indent > currLevel
+        then lift $ (, indent) <$> takeWhileP (Just "heading") (/= '\n') <* endOfLine
+        else failure Nothing mempty
 
 
 documentParser :: Parser (OkDocument Root)
@@ -272,16 +283,16 @@ render (DocumentRoot topLevelChildren _) = go emptyDoc 1 (computeOffsets topLeve
 --- File I/O ---
 
 
-getOkFilePath :: ErrorSh FilePath
+getOkFilePath :: OkApp FilePath
 getOkFilePath = do
-  path <- lift $ (</> (".ok" :: FilePath)) <$> pwd
-  exists <- lift $ test_f path
+  path <- (</> (".ok" :: FilePath)) <$> pwd
+  exists <- test_f path
   if exists
     then return path
     else throwError $ "Couldn't find file " <> show path
 
 
-readOkFile :: ErrorSh (OkDocument Root)
+readOkFile :: OkApp (OkDocument Root)
 readOkFile = do
   okFile <- getOkFilePath
   liftEither . parseOkText (show okFile) =<< lift (readfile okFile)
@@ -290,8 +301,8 @@ readOkFile = do
 --- Command Execution ---
 
 
-lookupCommand :: Text -> OkDocument Root -> ErrorSh Text
+lookupCommand :: Text -> OkDocument Root -> OkApp Text
 lookupCommand ref (DocumentRoot _ table) =
   case Map.lookup ref table of
-    Nothing -> throwError $ "Couldn't find command " <> T.unpack ref
+    Nothing  -> throwError $ "Couldn't find command " <> T.unpack ref
     Just cmd -> pure cmd
