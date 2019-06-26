@@ -135,14 +135,14 @@ commandStrings recurse document =
   where
     filterChildren :: [OkDocument Child] -> [OkDocument Child]
     filterChildren = if recurse then id
-                     else mapMaybe (\case c@(Command _ _ _) -> Just c
+                     else mapMaybe (\case c@Command{} -> Just c
                                           _ -> Nothing
                                    )
 
 documentChildren :: OkDocument a -> [OkDocument Child]
 documentChildren (DocumentRoot children _)    = children
 documentChildren (DocumentSection _ children) = children
-documentChildren (Command _ _ _)              = []
+documentChildren Command{}                    = []
 
 --- Command Line Opts ---
 
@@ -269,7 +269,7 @@ render root@(DocumentRoot topLevelChildren _) =
     aliasPad = 1
 
     go :: [OkDocument Child] -> RenderContext ()
-    go elems = do
+    go elems =
       case elems of
         [] -> return ()
 
@@ -309,11 +309,7 @@ render root@(DocumentRoot topLevelChildren _) =
                   & indent aliasOffset
                   & (<> hardline)
 
-          tell $
-            cmdHead
-            & commandPrefix
-            & commandSuffix
-            & (<> alignedTail)
+          tell $ decoratedHead <> alignedTail
           go rest
 
         sec@(DocumentSection title children) : rest -> do
@@ -364,7 +360,7 @@ getOkFilePath = pwd >>= checkDir
                           <$> test_d parent
           if parentExists
             then checkDir parent
-            else throwError $ "Couldn't find an .ok file"
+            else throwError "Couldn't find an .ok file"
 
 
 readOkFile :: OkApp (OkDocument Root)
