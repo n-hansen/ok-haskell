@@ -16,7 +16,9 @@
 {-# LANGUAGE FlexibleContexts   #-}
 {-# LANGUAGE FlexibleInstances  #-}
 {-# LANGUAGE GADTs              #-}
+{-# LANGUAGE LambdaCase         #-}
 {-# LANGUAGE OverloadedStrings  #-}
+{-# LANGUAGE RankNTypes         #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TupleSections      #-}
 {-# LANGUAGE TypeFamilies       #-}
@@ -27,7 +29,6 @@ import           Control.Monad
 import           Control.Monad.Except
 import           Control.Monad.Reader
 import           Control.Monad.RWS.Strict
-import           Control.Monad.State.Strict
 import           Data.Bifunctor
 import           Data.Char
 import           Data.Function
@@ -46,11 +47,8 @@ import           Prelude                                   hiding (FilePath)
 import           Shelly.Lifted
 import           Text.Megaparsec                           as MP
 import           Text.Megaparsec.Char                      as MP
-import           Text.Megaparsec.Error                     as MP
-
 
 --- Top Level Functions ---
-
 
 main :: IO ()
 main = parseOpts >>= runProgram
@@ -98,7 +96,6 @@ runProgram opts = shelly . flip runReaderT opts . printErrors $ go
 
 --- OkDocument ---
 
-
 data Root
 data Child
 
@@ -111,7 +108,7 @@ data OkDocument a where
                   -> [OkDocument Child] -- ^ Children
                   -> OkDocument Child
 
-  Command :: Text -- ^ Command string
+  Command :: [Text] -- ^ Command strings
           -> Text -- ^ Alias
           -> Maybe Text -- ^ Doc string
           -> OkDocument Child
@@ -122,8 +119,30 @@ deriving instance Eq (OkDocument Child)
 deriving instance Eq (OkDocument Root)
 
 
---- Command Line Opts ---
+commandStrings :: Bool -> OkDocument a -> [Text]
+commandStrings recurse document =
+  case document of
+    DocumentRoot children _ -> children
+                               & filterChildren
+                               & concatMap (commandStrings recurse)
+    DocumentSection _ children -> children
+                                  & filterChildren
+                                  & concatMap (commandStrings recurse)
+    Command cmdStrs _ _ -> cmdStrs
 
+  where
+    filterChildren :: [OkDocument Child] -> [OkDocument Child]
+    filterChildren = if recurse then id
+                     else mapMaybe (\case c@(Command _ _ _) -> Just c
+                                          _ -> Nothing
+                                   )
+
+documentChildren :: OkDocument a -> [OkDocument Child]
+documentChildren (DocumentRoot children _)    = children
+documentChildren (DocumentSection _ children) = children
+documentChildren (Command _ _ _)              = []
+
+--- Command Line Opts ---
 
 parseOpts :: IO RunOpts
 parseOpts = Opt.execParser $ Opt.info parser desc
@@ -151,7 +170,6 @@ parseOpts = Opt.execParser $ Opt.info parser desc
 
 --- File Parsing ---
 
-
 type Parser = Parsec Void Text
 type ChildParser = RWST Int (Map Text Text) Int Parser
 
@@ -165,6 +183,7 @@ cmdParser = do
   if cs == mempty
     then failure Nothing mempty
     else do
+    let css = fmap T.strip . T.splitOn ";" $ cs
     alias <- case a of
                Just alias -> pure alias
                Nothing -> do
@@ -172,7 +191,7 @@ cmdParser = do
                  modify (+ 1)
                  pure alias
     tell $ Map.singleton alias cs
-    return $ Command cs alias ds
+    return $ Command css alias ds
 
   where
     commandStringParser = T.strip <$> takeWhileP (Just "command string") (and <$> sequence [(/= '#'), (/= '\n')])
@@ -237,59 +256,80 @@ endOfLine = void MP.newline <|> MP.eof
 
 --- Document Rendering ---
 
+type RenderContext = RWS (Int, Int, Int) (Doc AnsiStyle) ()
 
 render :: OkDocument Root -> Doc AnsiStyle
-render (DocumentRoot topLevelChildren _) = go emptyDoc 1 (computeOffsets topLevelChildren) topLevelChildren
+render root@(DocumentRoot topLevelChildren _) =
+  snd $ evalRWS (updateContext root root $ go topLevelChildren) (0,0,0) ()
+
+  -- go emptyDoc 1 (computeOffsets topLevelChildren) topLevelChildren
   where
     dsPad = 2
     aliasPad = 1
 
-    go :: Doc AnsiStyle -> Int -> (Int, Int) -> [OkDocument Child] -> Doc AnsiStyle
-    go doc depth offsets@(dsOffset, aliasOffset) elems =
+    go :: [OkDocument Child] -> RenderContext ()
+    go elems = do
+      case elems of
+        [] -> return ()
+
+        Command cmds alias ds : rest -> do
+          (dsOffset, aliasOffset, _) <- ask
+          let commandPrefix :: Doc AnsiStyle -> Doc AnsiStyle
+              commandPrefix doc =
+                width (annotate (color Green) $ pretty alias <> ":") (\w -> indent (aliasOffset - w) $ align doc)
+
+              commandSuffix :: Doc AnsiStyle -> Doc AnsiStyle
+              commandSuffix doc =
+                case ds of
+                  Nothing -> doc <> hardline
+                  Just dsStr ->
+                    width doc (\w -> annotate (color Blue) $
+                                indent (dsOffset - w + aliasOffset) $ "#" <+> pretty dsStr)
+                    <> hardline
+
+              commandBody :: Doc AnsiStyle
+              commandBody =
+                cmds
+                & fmap pretty
+                & intersperse (";" <> hardline)
+                & mconcat
+
+          tell $
+            commandBody
+            & commandPrefix
+            & commandSuffix
+          go rest
+
+        sec@(DocumentSection title children) : rest -> do
+          (_,_,depth) <- ask
+          let header = annotate (color Red) $
+                       pretty (T.replicate depth "#") <+> pretty title <> hardline
+              -- childDoc = go (doc <> header) (depth + 1) (computeOffsets children) children
+          tell header
+          updateContext sec sec $ go children
+          go rest
+
+    updateContext :: OkDocument a -> OkDocument b -> RenderContext c -> RenderContext c
+    updateContext dsAlignCtx aliasAlignCtx =
       let
-        commandPrefix :: Text -> Doc AnsiStyle -> Doc AnsiStyle
-        commandPrefix alias doc =
-          width (annotate (color Green) $ pretty alias <> ":") (\w -> indent (aliasOffset - w) doc)
-
-        commandSuffix :: Maybe Text -> Doc AnsiStyle -> Doc AnsiStyle
-        commandSuffix ds doc =
-          case ds of
-            Nothing -> doc <> hardline
-            Just dsStr ->
-              width doc (\w -> annotate (color Blue) $
-                               indent (dsOffset - w + aliasOffset) $ "#" <+> (align . sep . fmap pretty . T.words $ dsStr))
-              <> hardline
+        dsOffset = dsAlignCtx
+                   & commandStrings False
+                   & fmap ((dsPad +) . T.length)
+                   & (0 :)
+                   & maximum
+        aliasOffset = aliasAlignCtx
+                      & documentChildren
+                      & fmap (\case
+                                 Command _ a _ -> T.length a + 1 + aliasPad
+                                 _ -> 0
+                             )
+                      & (2 + aliasPad :)
+                      & maximum
       in
-        case elems of
-          [] -> doc
-
-          Command name alias ds : rest ->
-            let line = pretty name
-                       & commandPrefix alias
-                       & commandSuffix ds
-            in
-              go (doc <> line) depth offsets rest
-
-          DocumentSection title children : rest ->
-            let header = annotate (color Red) $
-                         pretty (T.replicate depth "#") <+> pretty title <> hardline
-                childDoc = go (doc <> header) (depth + 1) (computeOffsets children) children
-            in
-              go childDoc depth offsets rest
-
-
-    computeOffsets =
-      foldl' (\acc@(dso, ao) e -> case e of
-                                    Command cmd a _ ->
-                                      ( max dso (T.length cmd + dsPad)
-                                      , max ao (T.length a + 1 + aliasPad)
-                                      )
-                                    _ -> acc
-             ) (0,2+aliasPad)
+        local (\(_,_,depth) -> (dsOffset, aliasOffset, depth+1))
 
 
 --- File I/O ---
-
 
 getOkFilePath :: OkApp FilePath
 getOkFilePath = pwd >>= checkDir
@@ -319,7 +359,6 @@ readOkFile = do
 
 
 --- Command Execution ---
-
 
 lookupCommand :: Text -> OkDocument Root -> OkApp Text
 lookupCommand ref (DocumentRoot _ table) =
