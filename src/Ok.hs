@@ -11,6 +11,7 @@
   --package mtl
   --package containers
   --package system-filepath
+  --package split
 -}
 {-# LANGUAGE EmptyDataDecls     #-}
 {-# LANGUAGE FlexibleContexts   #-}
@@ -33,6 +34,7 @@ import           Data.Bifunctor
 import           Data.Char
 import           Data.Function
 import           Data.List
+import           Data.List.Split
 import           Data.Map.Strict                           (Map)
 import qualified Data.Map.Strict                           as Map
 import           Data.Maybe
@@ -286,17 +288,32 @@ render root@(DocumentRoot topLevelChildren _) =
                                 indent (dsOffset - w + aliasOffset) $ "#" <+> pretty dsStr)
                     <> hardline
 
-              commandBody :: Doc AnsiStyle
-              commandBody =
+              (cmdHead:cmdTail) =
                 cmds
+                & intersperse ";"
+                & chunksOf 2
+                & fmap mconcat
                 & fmap pretty
-                & intersperse (";" <> hardline)
-                & mconcat
+
+              decoratedHead =
+                cmdHead
+                & commandPrefix
+                & commandSuffix
+
+              alignedTail =
+                if null cmdTail then mempty else
+                  cmdTail
+                  & intersperse hardline
+                  & mconcat
+                  & align
+                  & indent aliasOffset
+                  & (<> hardline)
 
           tell $
-            commandBody
+            cmdHead
             & commandPrefix
             & commandSuffix
+            & (<> alignedTail)
           go rest
 
         sec@(DocumentSection title children) : rest -> do

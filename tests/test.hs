@@ -214,6 +214,12 @@ tests =
                   , "   bar"
                   ]
         )
+      , renderTestCase "render test 11"
+        (DocumentRoot [Command ["foo","bar baz"] "1" (Just "standard metavariables")] mempty)
+        ( unlines [ "1: foo;     # standard metavariables"
+                  , "   bar baz"
+                  ]
+        )
       ]
     ]
   ]
