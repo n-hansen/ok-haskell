@@ -262,7 +262,6 @@ render :: OkDocument Root -> Doc AnsiStyle
 render root@(DocumentRoot topLevelChildren _) =
   snd $ evalRWS (updateContext root root $ go topLevelChildren) (0,0,0) ()
 
-  -- go emptyDoc 1 (computeOffsets topLevelChildren) topLevelChildren
   where
     dsPad = 2
     aliasPad = 1
@@ -304,7 +303,6 @@ render root@(DocumentRoot topLevelChildren _) =
           (_,_,depth) <- ask
           let header = annotate (color Red) $
                        pretty (T.replicate depth "#") <+> pretty title <> hardline
-              -- childDoc = go (doc <> header) (depth + 1) (computeOffsets children) children
           tell header
           updateContext sec sec $ go children
           go rest
