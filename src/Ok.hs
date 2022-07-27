@@ -43,7 +43,7 @@ import qualified Data.Text                                 as T
 import           Data.Text.Prettyprint.Doc
 import           Data.Text.Prettyprint.Doc.Render.Terminal
 import           Data.Void
-import qualified Filesystem.Path                           as FP
+import qualified System.FilePath                           as FP
 import qualified Options.Applicative                       as Opt
 import           Prelude                                   hiding (FilePath)
 import           Shelly.Lifted
@@ -82,7 +82,7 @@ runProgram opts = shelly . flip runReaderT opts . printErrors $ go
           echo_n =<< renderStrict . layoutPretty defaultLayoutOptions . render <$> readOkFile
 
         GetOkLocation ->
-          echo_n =<< toTextIgnore . FP.directory <$> getOkFilePath
+          echo_n =<< toTextIgnore . directory <$> getOkFilePath
 
         GetCmd identifier ->
           echo_n =<< lookupCommand identifier =<< readOkFile
@@ -94,6 +94,8 @@ runProgram opts = shelly . flip runReaderT opts . printErrors $ go
         Left err -> do
           echo_err ("Ok Error: " <> T.pack err)
           quietExit 1
+
+    directory = FP.joinPath . init . FP.splitPath
 
 
 --- OkDocument ---
@@ -355,7 +357,7 @@ getOkFilePath = pwd >>= checkDir
         if not canRecurse
           then throwError $ "Couldn't find file " <> show (toTextIgnore filePath)
           else do
-          let parent = FP.parent path
+          let parent = FP.joinPath . init . FP.splitPath $ path
           parentExists <- (&&) (parent /= path)
                           <$> test_d parent
           if parentExists
